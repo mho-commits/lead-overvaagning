@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolveCampaignAndTenant } from "@/lib/resolveCampaign";
 
+export const runtime = "nodejs";
 function assertSecret(req: NextRequest) {
   const secret = req.headers.get("x-webhook-secret");
 
@@ -30,13 +31,21 @@ export async function POST(req: NextRequest) {
   try {
     assertSecret(req);
 
-    const url = new URL(req.url);
+    function assertSecret(req: NextRequest) {
+  const headerSecret = req.headers.get("x-webhook-secret");
 
-    // ✅ VIGTIGT: tenant kan komme fra URL’en: /api/webhooks/drupal?tenant=horsens
-    // fallback til payload, fallback til "horsens" (så det virker som før)
-    const tenantFromQuery = url.searchParams.get("tenant");
-    const body = await req.json();
+  const url = new URL(req.url);
+  const querySecret = url.searchParams.get("secret");
 
+  const secret = headerSecret || querySecret;
+
+  if (!process.env.DRUPAL_WEBHOOK_SECRET) {
+    throw new Error("Missing DRUPAL_WEBHOOK_SECRET");
+  }
+  if (!secret || secret !== process.env.DRUPAL_WEBHOOK_SECRET) {
+    throw new Error("Invalid webhook secret");
+  }
+}
     const tenantKey =
       (tenantFromQuery && tenantFromQuery.trim()) ||
       (body?.tenantKey && String(body.tenantKey).trim()) ||
