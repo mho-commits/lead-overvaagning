@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LeadEvent {
+  id               String   @id @default(uuid())
+  tenantKey        String
+  source           String
+  receivedAt       DateTime @default(now())
+  occurredAt       DateTime?
+
+  campaignKey      String
+  campaignName     String?
+
+  formId           String?
+  externalLeadId   String?
+
+  email            String?
+  phone            String?
+
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  utmContent       String?
+  utmTerm          String?
+
+  rawPayload       Json
+
+  @@index([tenantKey, receivedAt])
+  @@index([tenantKey, campaignKey, receivedAt])
+  @@unique([source, externalLeadId])
+}

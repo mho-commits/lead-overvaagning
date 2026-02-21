@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LeadEvent {
+  id               String   @id @default(uuid())
+  tenantKey        String
+  source           String
+  receivedAt       DateTime @default(now())
+  occurredAt       DateTime?
+
+  campaignKey      String
+  campaignName     String?
+
+  formId           String?
+  externalLeadId   String?
+
+  email            String?
+  phone            String?
+
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  utmContent       String?
+  utmTerm          String?
+
+  rawPayload       Json
+
+  @@index([tenantKey, receivedAt])
+  @@index([tenantKey, campaignKey, receivedAt])
+  @@unique([source, externalLeadId])
+}
+model Tenant {
+  tenantKey   String   @id
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  mappings    Mapping[]
+}
+
+model Mapping {
+  id            String   @id @default(cuid())
+  tenantKey      String
+  source         String   // "drupal" | "meta"
+  formId         String
+  campaignKey    String
+  forceTenantKey String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantKey], references: [tenantKey], onDelete: Cascade)
+
+  @@unique([tenantKey, source, formId])
+  @@index([source, formId])
+}
+
+model CampaignGroup {
+  id          String   @id @default(cuid())
+  tenantKey   String
+  groupKey    String
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items CampaignGroupItem[]
+
+  @@unique([tenantKey, groupKey])
+  @@index([tenantKey])
+}
+
+model CampaignGroupItem {
+  id              String        @id @default(cuid())
+  tenantKey        String
+  groupId          String
+  campaignKey      String
+  createdAt        DateTime     @default(now())
+
+  group CampaignGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantKey, groupId, campaignKey])
+  @@index([tenantKey])
+  @@index([groupId])
+  @@index([tenantKey, campaignKey])
+}
