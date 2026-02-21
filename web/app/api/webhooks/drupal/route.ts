@@ -4,13 +4,18 @@ import { prisma } from "@/lib/prisma";
 import { resolveCampaignAndTenant } from "@/lib/resolveCampaign";
 
 export const runtime = "nodejs";
+
 function assertSecret(req: NextRequest) {
-  const secret = req.headers.get("x-webhook-secret");
+  const headerSecret = req.headers.get("x-webhook-secret");
+  const url = new URL(req.url);
+  const querySecret = url.searchParams.get("secret");
+
+  const secret = headerSecret || querySecret;
 
   if (!process.env.DRUPAL_WEBHOOK_SECRET) {
     throw new Error("Missing DRUPAL_WEBHOOK_SECRET");
   }
-  if (secret !== process.env.DRUPAL_WEBHOOK_SECRET) {
+  if (!secret || secret !== process.env.DRUPAL_WEBHOOK_SECRET) {
     throw new Error("Invalid webhook secret");
   }
 }
@@ -31,21 +36,11 @@ export async function POST(req: NextRequest) {
   try {
     assertSecret(req);
 
-    function assertSecret(req: NextRequest) {
-  const headerSecret = req.headers.get("x-webhook-secret");
+    const url = new URL(req.url);
+    const tenantFromQuery = url.searchParams.get("tenant");
 
-  const url = new URL(req.url);
-  const querySecret = url.searchParams.get("secret");
+    const body = await req.json();
 
-  const secret = headerSecret || querySecret;
-
-  if (!process.env.DRUPAL_WEBHOOK_SECRET) {
-    throw new Error("Missing DRUPAL_WEBHOOK_SECRET");
-  }
-  if (!secret || secret !== process.env.DRUPAL_WEBHOOK_SECRET) {
-    throw new Error("Invalid webhook secret");
-  }
-}
     const tenantKey =
       (tenantFromQuery && tenantFromQuery.trim()) ||
       (body?.tenantKey && String(body.tenantKey).trim()) ||
@@ -92,17 +87,17 @@ export async function POST(req: NextRequest) {
       id: lead.id,
     });
   } catch (err: any) {
-  const hasHeaderSecret = Boolean(req.headers.get("x-webhook-secret"));
-  const hasQuerySecret = new URL(req.url).searchParams.has("secret");
+    const hasHeaderSecret = Boolean(req.headers.get("x-webhook-secret"));
+    const hasQuerySecret = new URL(req.url).searchParams.has("secret");
 
-  console.error("DRUPAL webhook error:", err);
-  return NextResponse.json(
-    {
-      ok: false,
-      error: err?.message || "Unknown error",
-      debug: { hasHeaderSecret, hasQuerySecret },
-    },
-    { status: 401 }
-  );
-}
+    console.error("DRUPAL webhook error:", err);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: err?.message || "Unknown error",
+        debug: { hasHeaderSecret, hasQuerySecret },
+      },
+      { status: 401 }
+    );
+  }
 }
