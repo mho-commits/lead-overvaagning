@@ -92,10 +92,16 @@ export async function POST(req: NextRequest) {
       id: lead.id,
     });
   } catch (err: any) {
-    console.error("DRUPAL webhook error:", err);
-    return NextResponse.json(
-      { ok: false, error: err?.message || "Unknown error" },
-      { status: 401 }
-    );
-  }
+  const hasHeaderSecret = Boolean(req.headers.get("x-webhook-secret"));
+  const hasQuerySecret = new URL(req.url).searchParams.has("secret");
+
+  console.error("DRUPAL webhook error:", err);
+  return NextResponse.json(
+    {
+      ok: false,
+      error: err?.message || "Unknown error",
+      debug: { hasHeaderSecret, hasQuerySecret },
+    },
+    { status: 401 }
+  );
 }
