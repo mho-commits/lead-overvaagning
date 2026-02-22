@@ -16,28 +16,13 @@ function isoDateUTC(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function parseDateParam(v: string) {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d;
-}
-
 export const GET = async (req: NextRequest) => {
   try {
     const url = new URL(req.url);
-
     const tenant = url.searchParams.get("tenant") || "";
     const groupKey = url.searchParams.get("group") || "";
     const daysRaw = url.searchParams.get("days") || "7";
     const days = Math.max(1, Math.min(90, Number(daysRaw) || 7));
-
-    // Nye filtre (valgfri)
-    const campaign = url.searchParams.get("campaign") || "";
-    const source = url.searchParams.get("source") || "";
-    const from = url.searchParams.get("from") || "";
-    const to = url.searchParams.get("to") || "";
-
-
 
     if (!tenant) {
       return NextResponse.json({ ok: false, error: "Missing tenant" }, { status: 400 });
@@ -48,9 +33,6 @@ export const GET = async (req: NextRequest) => {
 
     const rangeStart = new Date(todayStart);
     rangeStart.setUTCDate(rangeStart.getUTCDate() - (days - 1));
-
-    const fromDate = parseDateParam(from);
-    const toDate = parseDateParam(to);
 
     // Hvis group-filter: hent campaignKeys
     let campaignKeys: string[] | null = null;
@@ -65,7 +47,6 @@ export const GET = async (req: NextRequest) => {
       }
 
       campaignKeys = group.items.map((i) => i.campaignKey);
-
       // tom gruppe => alt 0
       if (campaignKeys.length === 0) {
         return NextResponse.json({
@@ -87,44 +68,22 @@ export const GET = async (req: NextRequest) => {
       }
     }
 
-    // Base filter (bagudkompatibel – nye filtre er valgfri)
     const whereBase: any = {
       tenantKey: tenant,
       ...(campaignKeys ? { campaignKey: { in: campaignKeys } } : {}),
-      ...(campaign ? { campaignKey: campaign } : {}),
-      ...(source ? { source } : {}),
     };
-
-    // Helper: tidsfilter på COALESCE(occurredAt, receivedAt)
-    // (Vi modellerer det som OR på occurredAt vs receivedAt)
-    const timeOrFor = (gte: Date) => ({
-      OR: [
-        {
-          occurredAt: {
-            gte,
-            ...(toDate ? { lte: toDate } : {}),
-          },
-        },
-        {
-          occurredAt: null,
-          receivedAt: {
-            gte,
-            ...(toDate ? { lte: toDate } : {}),
-          },
-        },
-      ],
-    });
 
     const [total, today, last] = await Promise.all([
       prisma.leadEvent.count({ where: whereBase }),
-
       prisma.leadEvent.count({
         where: {
           ...whereBase,
-          ...timeOrFor(fromDate ?? todayStart),
+          OR: [
+            { occurredAt: { gte: todayStart } },
+            { occurredAt: null, receivedAt: { gte: todayStart } },
+          ],
         },
       }),
-
       prisma.leadEvent.findFirst({
         where: whereBase,
         orderBy: [{ occurredAt: "desc" }, { receivedAt: "desc" }],
@@ -134,11 +93,14 @@ export const GET = async (req: NextRequest) => {
 
     const lastReceivedAt = (last?.occurredAt || last?.receivedAt || null)?.toISOString?.() ?? null;
 
-    // byDay + byCampaign (range)
+    // byDay (JS – simpelt og robust)
     const eventsInRange = await prisma.leadEvent.findMany({
       where: {
         ...whereBase,
-        ...timeOrFor(fromDate ?? rangeStart),
+        OR: [
+          { occurredAt: { gte: rangeStart } },
+          { occurredAt: null, receivedAt: { gte: rangeStart } },
+        ],
       },
       select: { occurredAt: true, receivedAt: true, campaignKey: true },
     });
@@ -154,8 +116,6 @@ export const GET = async (req: NextRequest) => {
 
     for (const e of eventsInRange) {
       const ts = e.occurredAt ?? e.receivedAt;
-      if (!ts) continue;
-
       const key = isoDateUTC(new Date(ts));
       if (dayCounts[key] !== undefined) dayCounts[key] += 1;
 
@@ -171,8 +131,7 @@ export const GET = async (req: NextRequest) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 50);
 
-    // byGroup (som før) - NB: denne respekterer IKKE campaign/source/from/to endnu.
-    // Den bruger rangeStart, og group-items. Hvis du vil, kan vi filtrere den også bagefter.
+    // byGroup (som før)
     const byGroupRows = (await prisma.$queryRaw`
       SELECT
         g."groupKey" as "groupKey",
@@ -211,6 +170,9 @@ export const GET = async (req: NextRequest) => {
     });
   } catch (err: any) {
     console.error("STATS error:", err);
-    return NextResponse.json({ ok: false, error: err?.message || "Unknown error" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: err?.message || "Unknown error" },
+      { status: 500 }
+    );
   }
 };

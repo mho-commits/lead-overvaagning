@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import CustomizePanel from "@/app/dashboard/CustomizePanel";
 import GroupsPanel from "./GroupsPanel";
 
@@ -51,10 +52,14 @@ type Group = {
 type GroupsResponse = { ok: boolean; groups: Group[] };
 
 export default function DashboardClient({ tenant }: { tenant: string }) {
+    const router = useRouter();
+const searchParams = useSearchParams();
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupKey, setActiveGroupKey] = useState<string>(""); // "" = ingen filter
+  const [activeCampaignKey, setActiveCampaignKey] = useState<string>(""); // "" = alle
+  const [activeSource, setActiveSource] = useState<string>(""); // "" = alle
   const [error, setError] = useState<string | null>(null);
 
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -68,7 +73,20 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
 
   const days = 7;
   const limit = 20;
+const didInitFromUrl = useRef(false);
 
+useEffect(() => {
+  if (didInitFromUrl.current) return;
+
+  const campaignFromUrl = searchParams.get("campaign") || "";
+  const sourceFromUrl = searchParams.get("source") || "";
+
+  setActiveCampaignKey(campaignFromUrl);
+  setActiveSource(sourceFromUrl);
+
+  didInitFromUrl.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [searchParams]);
   // Load widget prefs per tenant
   useEffect(() => {
     const loaded = loadWidgetState(tenant);
@@ -80,6 +98,20 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
     saveWidgetState(tenant, widgetState);
   }, [tenant, widgetState]);
 
+  useEffect(() => {
+  const params = new URLSearchParams(searchParams.toString());
+
+  if (activeCampaignKey) params.set("campaign", activeCampaignKey);
+  else params.delete("campaign");
+
+  if (activeSource) params.set("source", activeSource);
+  else params.delete("source");
+
+  // Vi rører ikke tenant her – page.tsx styrer tenant prop
+  router.replace(`/dashboard?${params.toString()}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [activeCampaignKey, activeSource]);
+
   async function fetchGroups(t: string) {
     const res = await fetch(`/api/groups?tenant=${encodeURIComponent(t)}`, {
       cache: "no-store",
@@ -90,9 +122,11 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
   }
 
   async function fetchStats(t: string, groupKey: string) {
-    const q =
-      `/api/stats?tenant=${encodeURIComponent(t)}&days=${days}` +
-      (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "");
+   const q =
+  `/api/stats?tenant=${encodeURIComponent(t)}&days=${days}` +
+  (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
+  (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
+  (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
     const res = await fetch(q, { cache: "no-store" });
     if (!res.ok) throw new Error(`stats ${res.status}`);
     return (await res.json()) as StatsResponse;
@@ -100,8 +134,10 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
 
   async function fetchEvents(t: string, groupKey: string) {
     const q =
-      `/api/events?tenant=${encodeURIComponent(t)}&limit=${limit}` +
-      (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "");
+  `/api/events?tenant=${encodeURIComponent(t)}&limit=${limit}` +
+  (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
+  (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
+  (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
     const res = await fetch(q, { cache: "no-store" });
     if (!res.ok) throw new Error(`events ${res.status}`);
     const json = (await res.json()) as EventsResponse;
@@ -135,7 +171,7 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
       setError(e?.message ?? "Kunne ikke hente data")
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant, activeGroupKey]);
+ }, [tenant, activeGroupKey, activeCampaignKey, activeSource]);
 
   // Realtime SSE
   useEffect(() => {
@@ -547,42 +583,95 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {activeGroupKey ? (
-            <button
-              onClick={() => setActiveGroupKey("")}
-              className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-            >
-              Clear group filter
-            </button>
-          ) : null}
+  {/* Campaign filter */}
+  <select
+    value={activeCampaignKey}
+    onChange={(e) => setActiveCampaignKey(e.target.value)}
+    className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+  >
+    <option value="">Alle campaigns</option>
+    {(stats?.byCampaign ?? []).map((c) => (
+      <option key={c.campaignKey} value={c.campaignKey}>
+        {c.campaignKey}
+      </option>
+    ))}
+  </select>
+  <div className="flex items-center overflow-hidden rounded-xl border border-gray-800">
+  <button
+    type="button"
+    onClick={() => setActiveSource("")}
+    className={
+      "px-3 py-2 text-sm font-medium " +
+      (activeSource === ""
+        ? "bg-white text-black"
+        : "bg-gray-950 text-white hover:bg-black")
+    }
+  >
+    All
+  </button>
 
-          <button
-            onClick={() => setGroupsOpen(true)}
-            className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-          >
-            Grupper
-          </button>
+  <button
+    type="button"
+    onClick={() => setActiveSource("meta")}
+    className={
+      "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
+      (activeSource === "meta"
+        ? "bg-white text-black"
+        : "bg-gray-950 text-white hover:bg-black")
+    }
+  >
+    Meta
+  </button>
 
-          <button
-            onClick={() => setCustomizeOpen(true)}
-            className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-          >
-            Customize metrics
-          </button>
+  <button
+    type="button"
+    onClick={() => setActiveSource("drupal")}
+    className={
+      "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
+      (activeSource === "drupal"
+        ? "bg-white text-black"
+        : "bg-gray-950 text-white hover:bg-black")
+    }
+  >
+    Drupal
+  </button>
+</div>
 
-          <button
-            onClick={() =>
-              refreshAll(tenant, activeGroupKey).catch((e: any) =>
-                setError(e?.message ?? "Refresh fejlede")
-              )
-            }
-            className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
+  {activeGroupKey ? (
+    <button
+      onClick={() => setActiveGroupKey("")}
+      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+    >
+      Clear group filter
+    </button>
+  ) : null}
 
+  <button
+    onClick={() => setGroupsOpen(true)}
+    className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+  >
+    Grupper
+  </button>
+
+  <button
+    onClick={() => setCustomizeOpen(true)}
+    className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+  >
+    Customize metrics
+  </button>
+
+  <button
+    onClick={() =>
+      refreshAll(tenant, activeGroupKey).catch((e: any) =>
+        setError(e?.message ?? "Refresh fejlede")
+      )
+    }
+    className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
+  >
+    Refresh
+  </button>
+</div>
+ </div>
       {renderKpis()}
       {renderGroupFilter()}
 
