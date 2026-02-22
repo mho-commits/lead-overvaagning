@@ -20,7 +20,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Hvis der er group-filter: find kampagnerne i gruppen
     let campaignKeys: string[] | null = null;
     if (groupKey) {
       const group = await prisma.campaignGroup.findUnique({
@@ -36,7 +35,6 @@ export async function GET(req: NextRequest) {
       }
 
       campaignKeys = group.items.map((i) => i.campaignKey);
-      // Hvis gruppen er tom, så returnér tom liste
       if (campaignKeys.length === 0) {
         return NextResponse.json({ ok: true, events: [] });
       }
@@ -51,18 +49,31 @@ export async function GET(req: NextRequest) {
       take: limit,
     });
 
-    const events = rows.map((e: any) => ({
-      id: e.id,
-      tenantKey: e.tenantKey,
-      campaignKey: e.campaignKey,
-      source: e.source,
-      externalLeadId: e.externalLeadId,
-      email: e.email ?? null,
-      phone: e.phone ?? null,
-      formId: e.formId ?? null,
-      receivedAt: (e.occurredAt ?? e.receivedAt).toISOString(),
-      occurredAt: (e.occurredAt ?? null)?.toISOString?.() ?? null,
-    }));
+    const events = rows.map((e: any) => {
+      const raw = (e.rawPayload ?? {}) as any;
+
+      const clubName =
+        raw?.klubnavn ||
+        raw?.clubName ||
+        raw?.club_name ||
+        raw?.club ||
+        raw?.club_id ||
+        null;
+
+      return {
+        id: e.id,
+        tenantKey: e.tenantKey,
+        campaignKey: e.campaignKey,
+        source: e.source,
+        externalLeadId: e.externalLeadId,
+        email: e.email ?? null,
+        phone: e.phone ?? null,
+        formId: e.formId ?? null,
+        clubName: typeof clubName === "string" ? clubName.trim() : null,
+        receivedAt: (e.occurredAt ?? e.receivedAt).toISOString(),
+        occurredAt: (e.occurredAt ?? null)?.toISOString?.() ?? null,
+      };
+    });
 
     return NextResponse.json({ ok: true, events });
   } catch (err: any) {

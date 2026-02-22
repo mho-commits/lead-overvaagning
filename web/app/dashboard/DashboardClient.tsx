@@ -35,6 +35,7 @@ export type LeadEvent = {
   email?: string | null;
   phone?: string | null;
   formId?: string | null;
+  clubName?: string | null; // ✅ NY (kommer fra /api/events)
   receivedAt: string;
 };
 
@@ -311,56 +312,54 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
       </section>
     );
   };
-const renderGroupBarChart = () => {
-  if (!widgetState.group_barchart) return null;
 
-  const rows = stats?.byGroup ?? [];
-  // Hvis du allerede har valgt en gruppe som filter, giver grafen typisk mindre mening
-  if (activeGroupKey) return null;
+  const renderGroupBarChart = () => {
+    if (!widgetState.group_barchart) return null;
 
-  if (rows.length === 0) return null;
+    const rows = stats?.byGroup ?? [];
+    // Hvis du allerede har valgt en gruppe som filter, giver grafen typisk mindre mening
+    if (activeGroupKey) return null;
+    if (rows.length === 0) return null;
 
-  const data = rows
-    .slice(0, 12)
-    .map((g) => ({ name: g.displayName, count: g.count }));
+    const data = rows.slice(0, 12).map((g) => ({ name: g.displayName, count: g.count }));
 
-  return (
-    <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow-lg">
-      <h2 className="mb-4 text-base font-semibold text-white">Leads pr gruppe</h2>
+    return (
+      <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow-lg">
+        <h2 className="mb-4 text-base font-semibold text-white">Leads pr gruppe</h2>
 
-      <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 12, fill: "#cbd5e1" }}
-              interval={0}
-              angle={-25}
-              textAnchor="end"
-              height={70}
-            />
-            <YAxis tick={{ fontSize: 12, fill: "#cbd5e1" }} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{
-                background: "#0b1220",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff",
-              }}
-              labelStyle={{ color: "#fff" }}
-              itemStyle={{ color: "#fff" }}
-            />
-            <Bar dataKey="count" fill="#ffffff" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.12)" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 12, fill: "#cbd5e1" }}
+                interval={0}
+                angle={-25}
+                textAnchor="end"
+                height={70}
+              />
+              <YAxis tick={{ fontSize: 12, fill: "#cbd5e1" }} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  background: "#0b1220",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#fff",
+                }}
+                labelStyle={{ color: "#fff" }}
+                itemStyle={{ color: "#fff" }}
+              />
+              <Bar dataKey="count" fill="#ffffff" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-      <div className="mt-3 text-xs text-gray-400">
-        Viser top 12 grupper (sorteret som API’et returnerer).
-      </div>
-    </section>
-  );
-};
+        <div className="mt-3 text-xs text-gray-400">
+          Viser top 12 grupper (sorteret som API’et returnerer).
+        </div>
+      </section>
+    );
+  };
 
   const renderLeadsOverTime = () => {
     if (!stats?.byDay || stats.byDay.length === 0) return null;
@@ -404,9 +403,7 @@ const renderGroupBarChart = () => {
       <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow-lg">
         <h2 className="mb-4 text-base font-semibold text-white">
           Leads per campaign{" "}
-          {activeGroupName ? (
-            <span className="text-gray-400">({activeGroupName})</span>
-          ) : null}
+          {activeGroupName ? <span className="text-gray-400">({activeGroupName})</span> : null}
         </h2>
 
         {(stats?.byCampaign?.length ?? 0) === 0 ? (
@@ -442,54 +439,63 @@ const renderGroupBarChart = () => {
       <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow-lg">
         <h2 className="mb-4 text-base font-semibold text-white">
           Recent leads{" "}
-          {activeGroupName ? (
-            <span className="text-gray-400">({activeGroupName})</span>
-          ) : null}
+          {activeGroupName ? <span className="text-gray-400">({activeGroupName})</span> : null}
         </h2>
 
         {events.length === 0 ? (
           <p className="text-sm text-gray-300">Ingen leads endnu.</p>
         ) : (
           <div className="space-y-3">
-            {events.map((e) => (
-              <div
-                key={e.id}
-                className="rounded-xl border border-gray-800 px-4 py-3 transition hover:bg-gray-950"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-white">
-                      {e.campaignKey === "unknown" ? (
-                        <span className="font-bold text-red-400">unknown</span>
-                      ) : (
-                        e.campaignKey
-                      )}{" "}
-                      <span
-                        className={
-                          e.source === "meta"
-                            ? "text-blue-400 font-medium"
-                            : e.source === "drupal"
-                            ? "text-green-400 font-medium"
-                            : "text-gray-400"
-                        }
-                      >
-                        ({e.source})
-                      </span>
+            {events.map((e) => {
+              const primary = (e.clubName && e.clubName.trim()) || e.campaignKey;
+              return (
+                <div
+                  key={e.id}
+                  className="rounded-xl border border-gray-800 px-4 py-3 transition hover:bg-gray-950"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      {/* ✅ Primær linje: Klubnavn hvis vi har det */}
+                      <div className="truncate text-sm font-medium text-white">
+                        {primary === "unknown" ? (
+                          <span className="font-bold text-red-400">unknown</span>
+                        ) : (
+                          primary
+                        )}{" "}
+                        <span
+                          className={
+                            e.source === "meta"
+                              ? "text-blue-400 font-medium"
+                              : e.source === "drupal"
+                              ? "text-green-400 font-medium"
+                              : "text-gray-400"
+                          }
+                        >
+                          ({e.source})
+                        </span>
+                      </div>
+
+                      {/* ✅ Sekundær linje: campaignKey hvis clubName er sat */}
+                      <div className="mt-1 truncate text-xs text-gray-300">
+                        {e.clubName ? (
+                          <>
+                            <span className="text-gray-400">{e.campaignKey}</span>
+                            {" • "}
+                          </>
+                        ) : null}
+                        {e.email || "—"}
+                        {e.phone ? ` • ${e.phone}` : ""}
+                        {e.formId ? ` • ${e.formId}` : ""}
+                      </div>
                     </div>
 
-                    <div className="mt-1 truncate text-xs text-gray-300">
-                      {e.email || "—"}
-                      {e.phone ? ` • ${e.phone}` : ""}
-                      {e.formId ? ` • ${e.formId}` : ""}
+                    <div className="shrink-0 text-xs text-gray-400">
+                      {formatTime(e.receivedAt)}
                     </div>
-                  </div>
-
-                  <div className="shrink-0 text-xs text-gray-400">
-                    {formatTime(e.receivedAt)}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -583,17 +589,16 @@ const renderGroupBarChart = () => {
       {anyLeft || anyRight ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-6">
-  {renderLeadsOverTime()}
-  {renderGroupBarChart()}
-  {renderCampaignTable()}
-</div>
+            {renderLeadsOverTime()}
+            {renderGroupBarChart()}
+            {renderCampaignTable()}
+          </div>
           <div className="space-y-6">{renderRecentLeads()}</div>
         </div>
       ) : (
         <div className="rounded-2xl border border-gray-800 bg-gray-900 p-8 text-sm text-gray-300 shadow-lg">
           Ingen widgets aktive. Klik{" "}
-          <span className="font-medium text-white">Customize metrics</span> for at
-          slå noget til.
+          <span className="font-medium text-white">Customize metrics</span> for at slå noget til.
         </div>
       )}
 
