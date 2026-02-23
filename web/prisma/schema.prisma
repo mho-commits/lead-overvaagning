@@ -16,6 +16,8 @@ model LeadEvent {
 
   campaignKey      String
   campaignName     String?
+clubId   String?
+clubName String?
 
   formId           String?
   externalLeadId   String?
