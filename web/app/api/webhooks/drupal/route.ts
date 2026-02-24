@@ -198,6 +198,11 @@ const clubName = extractClubName(body);
     });
 
     // 6) Persist (idempotent)
+    console.log("CLUB DEBUG:", {
+  clubId,
+  clubName,
+  body,
+});
     const lead = await prisma.leadEvent.upsert({
       where: {
         source_externalLeadId: {
