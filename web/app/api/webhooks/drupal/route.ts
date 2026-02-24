@@ -125,7 +125,19 @@ function extractUtmCampaign(body: any): string | null {
   const s = String(candidate).trim();
   return s.length ? s : null;
 }
+function extractClubId(body: any): string | null {
+  const candidate = body?.club_id ?? body?.clubId ?? null;
+  if (candidate === null || candidate === undefined) return null;
+  const s = String(candidate).trim();
+  return s.length ? s : null;
+}
 
+function extractClubName(body: any): string | null {
+  const candidate = body?.klubnavn ?? body?.clubName ?? null;
+  if (candidate === null || candidate === undefined) return null;
+  const s = String(candidate).trim();
+  return s.length ? s : null;
+}
 function pickTenantKey(body: any, reqUrl: URL): string {
   const tenantFromQuery = reqUrl.searchParams.get("tenant");
 
@@ -153,6 +165,8 @@ export async function POST(req: NextRequest) {
     const externalLeadId = extractExternalLeadId(body);
     const formId = extractFormId(body);
     const utmCampaign = extractUtmCampaign(body);
+    const clubId = extractClubId(body);
+const clubName = extractClubName(body);
 
     // 4) Basic validation
     if (!externalLeadId) {
@@ -191,15 +205,18 @@ export async function POST(req: NextRequest) {
           externalLeadId: String(externalLeadId),
         },
       },
-      update: {},
+      update: {clubId: body.club_id || null,
+clubName: body.klubnavn || null,},
       create: {
-        tenantKey: resolved.tenantKey,
-        campaignKey: resolved.campaignKey,
-        source: "drupal",
-        externalLeadId: String(externalLeadId),
-        occurredAt: new Date(),
-        rawPayload: body,
-      },
+  tenantKey: resolved.tenantKey,
+  campaignKey: resolved.campaignKey,
+  source: "drupal",
+  externalLeadId: String(externalLeadId),
+  occurredAt: new Date(),
+  clubId,
+  clubName,
+  rawPayload: body,
+},
     });
 
     // 7) OK

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomizePanel from "@/app/dashboard/CustomizePanel";
 import GroupsPanel from "./GroupsPanel";
@@ -36,8 +36,14 @@ export type LeadEvent = {
   email?: string | null;
   phone?: string | null;
   formId?: string | null;
-  clubName?: string | null; // ✅ NY (kommer fra /api/events)
+  clubName?: string | null;
   receivedAt: string;
+};
+
+type ClubRow = {
+  clubId: string | null;
+  clubName: string | null;
+  leads: number;
 };
 
 type EventsResponse = { ok: boolean; events: LeadEvent[] };
@@ -52,8 +58,9 @@ type Group = {
 type GroupsResponse = { ok: boolean; groups: Group[] };
 
 export default function DashboardClient({ tenant }: { tenant: string }) {
-    const router = useRouter();
-const searchParams = useSearchParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [events, setEvents] = useState<LeadEvent[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -62,82 +69,95 @@ const searchParams = useSearchParams();
   const [activeSource, setActiveSource] = useState<string>(""); // "" = alle
   const [error, setError] = useState<string | null>(null);
 
+  // clubs (for "Grupper" box -> klubber)
+  const [clubRows, setClubRows] = useState<ClubRow[]>([]);
+  const [clubLoading, setClubLoading] = useState(false);
+  const [clubError, setClubError] = useState<string | null>(null);
+
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [widgetState, setWidgetState] = useState<WidgetState>(defaultWidgetState());
 
-  const [realtime, setRealtime] = useState<"checking" | "live" | "off" | "error">(
-    "checking"
-  );
+  const [realtime, setRealtime] = useState<"checking" | "live" | "off" | "error">("checking");
   const esRef = useRef<EventSource | null>(null);
 
   const days = 7;
   const limit = 20;
-const didInitFromUrl = useRef(false);
 
-useEffect(() => {
-  if (didInitFromUrl.current) return;
+  const didInitFromUrl = useRef(false);
 
-  const campaignFromUrl = searchParams.get("campaign") || "";
-  const sourceFromUrl = searchParams.get("source") || "";
+  // Init filters from URL once
+  useEffect(() => {
+    if (didInitFromUrl.current) return;
 
-  setActiveCampaignKey(campaignFromUrl);
-  setActiveSource(sourceFromUrl);
+    const campaignFromUrl = searchParams.get("campaign") || "";
+    const sourceFromUrl = searchParams.get("source") || "";
 
-  didInitFromUrl.current = true;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [searchParams]);
+    setActiveCampaignKey(campaignFromUrl);
+    setActiveSource(sourceFromUrl);
+
+    didInitFromUrl.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Load widget prefs per tenant
   useEffect(() => {
     const loaded = loadWidgetState(tenant);
     setWidgetState(loaded);
   }, [tenant]);
 
-  // Persist on change
+  // Persist widget prefs
   useEffect(() => {
     saveWidgetState(tenant, widgetState);
   }, [tenant, widgetState]);
 
+  // Sync filters to URL
   useEffect(() => {
-  const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams.toString());
 
-  if (activeCampaignKey) params.set("campaign", activeCampaignKey);
-  else params.delete("campaign");
+    if (activeCampaignKey) params.set("campaign", activeCampaignKey);
+    else params.delete("campaign");
 
-  if (activeSource) params.set("source", activeSource);
-  else params.delete("source");
+    if (activeSource) params.set("source", activeSource);
+    else params.delete("source");
 
-  // Vi rører ikke tenant her – page.tsx styrer tenant prop
-  router.replace(`/dashboard?${params.toString()}`);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [activeCampaignKey, activeSource]);
+    router.replace(`/dashboard?${params.toString()}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCampaignKey, activeSource]);
 
   async function fetchGroups(t: string) {
-    const res = await fetch(`/api/groups?tenant=${encodeURIComponent(t)}`, {
-      cache: "no-store",
-    });
+    const res = await fetch(`/api/groups?tenant=${encodeURIComponent(t)}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`groups ${res.status}`);
     const json = (await res.json()) as GroupsResponse;
     return json.groups ?? [];
   }
 
   async function fetchStats(t: string, groupKey: string) {
-   const q =
-  `/api/stats?tenant=${encodeURIComponent(t)}&days=${days}` +
-  (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
-  (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
-  (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
+    const q =
+      `/api/stats?tenant=${encodeURIComponent(t)}&days=${days}` +
+      (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
+      (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
+      (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
+
     const res = await fetch(q, { cache: "no-store" });
     if (!res.ok) throw new Error(`stats ${res.status}`);
     return (await res.json()) as StatsResponse;
   }
 
+  async function fetchClubs(t: string) {
+    const q = `/api/grouped/clubs?tenant=${encodeURIComponent(t)}&days=${days}`;
+    const res = await fetch(q, { cache: "no-store" });
+    if (!res.ok) throw new Error(`clubs ${res.status}`);
+    return (await res.json()) as { ok: boolean; rows: ClubRow[]; error?: string };
+  }
+
   async function fetchEvents(t: string, groupKey: string) {
     const q =
-  `/api/events?tenant=${encodeURIComponent(t)}&limit=${limit}` +
-  (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
-  (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
-  (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
+      `/api/events?tenant=${encodeURIComponent(t)}&limit=${limit}` +
+      (groupKey ? `&group=${encodeURIComponent(groupKey)}` : "") +
+      (activeCampaignKey ? `&campaign=${encodeURIComponent(activeCampaignKey)}` : "") +
+      (activeSource ? `&source=${encodeURIComponent(activeSource)}` : "");
+
     const res = await fetch(q, { cache: "no-store" });
     if (!res.ok) throw new Error(`events ${res.status}`);
     const json = (await res.json()) as EventsResponse;
@@ -145,35 +165,48 @@ useEffect(() => {
   }
 
   async function refreshAll(t: string, groupKey: string) {
-    const [g, s, e] = await Promise.all([
-      fetchGroups(t),
-      fetchStats(t, groupKey),
-      fetchEvents(t, groupKey),
-    ]);
-    setGroups(g);
-    setStats(s);
-    setEvents(e);
+    setClubLoading(true);
+    setClubError(null);
+
+    try {
+      const [g, s, e, c] = await Promise.all([
+        fetchGroups(t),
+        fetchStats(t, groupKey),
+        fetchEvents(t, groupKey),
+        fetchClubs(t),
+      ]);
+
+      setGroups(g);
+      setStats(s);
+      setEvents(e);
+
+      if (!c.ok) throw new Error(c.error || "Kunne ikke hente klubber");
+      setClubRows((c.rows ?? []).slice().sort((a, b) => (b.leads ?? 0) - (a.leads ?? 0)));
+    } catch (err: any) {
+      setClubError(err?.message ?? "Kunne ikke hente klubber");
+      throw err;
+    } finally {
+      setClubLoading(false);
+    }
   }
 
   async function refreshGroupsOnly(t: string) {
-    const res = await fetch(`/api/groups?tenant=${encodeURIComponent(t)}`, {
-      cache: "no-store",
-    });
+    const res = await fetch(`/api/groups?tenant=${encodeURIComponent(t)}`, { cache: "no-store" });
     if (!res.ok) throw new Error(`groups ${res.status}`);
     const json = (await res.json()) as GroupsResponse;
     setGroups(json.groups ?? []);
   }
 
-  // Load data on tenant / group change
+  // Initial/filters load
   useEffect(() => {
     setError(null);
     refreshAll(tenant, activeGroupKey).catch((e: any) =>
       setError(e?.message ?? "Kunne ikke hente data")
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [tenant, activeGroupKey, activeCampaignKey, activeSource]);
+  }, [tenant, activeGroupKey, activeCampaignKey, activeSource]);
 
-  // Realtime SSE
+  // Realtime SSE (clean version)
   useEffect(() => {
     if (esRef.current) {
       esRef.current.close();
@@ -182,6 +215,17 @@ useEffect(() => {
 
     setRealtime("checking");
     const url = `/api/stream?tenant=${encodeURIComponent(tenant)}`;
+
+    let cancelled = false;
+
+    const onUpdate = async () => {
+      try {
+        await refreshAll(tenant, activeGroupKey);
+        if (!cancelled) setRealtime("live");
+      } catch {
+        if (!cancelled) setRealtime("error");
+      }
+    };
 
     (async () => {
       try {
@@ -208,38 +252,33 @@ useEffect(() => {
         }
 
         if (!ok) {
-          setRealtime("off");
+          if (!cancelled) setRealtime("off");
           return;
         }
 
         const es = new EventSource(url);
         esRef.current = es;
 
-        const onUpdate = async () => {
-          try {
-            await refreshAll(tenant, activeGroupKey);
-            setRealtime("live");
-          } catch {
-            setRealtime("error");
-          }
+        es.onmessage = onUpdate;
+        es.onerror = () => {
+          if (!cancelled) setRealtime("error");
         };
 
-        es.onopen = () => setRealtime("live");
-        es.addEventListener("lead_created", onUpdate);
-        es.onmessage = onUpdate;
-        es.onerror = () => setRealtime("error");
+        if (!cancelled) setRealtime("live");
       } catch {
-        setRealtime("off");
+        if (!cancelled) setRealtime("off");
       }
     })();
 
     return () => {
+      cancelled = true;
       if (esRef.current) {
         esRef.current.close();
         esRef.current = null;
       }
     };
-  }, [tenant, activeGroupKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant, activeGroupKey, activeCampaignKey, activeSource]);
 
   const activeGroupName =
     activeGroupKey && groups.find((g) => g.groupKey === activeGroupKey)?.displayName;
@@ -249,17 +288,8 @@ useEffect(() => {
     const kpiWidgets = [
       { id: "kpi_total" as const, title: "Total", value: stats?.total ?? "—" },
       { id: "kpi_today" as const, title: "I dag", value: stats?.today ?? "—" },
-      {
-        id: "kpi_last7" as const,
-        title: `Sidste ${days} dage`,
-        value: stats?.lastNDays ?? "—",
-      },
-      {
-        id: "kpi_lastReceived" as const,
-        title: "Sidst modtaget",
-        value: formatTime(stats?.lastReceivedAt),
-        small: true,
-      },
+      { id: "kpi_last7" as const, title: `Sidste ${days} dage`, value: stats?.lastNDays ?? "—" },
+      { id: "kpi_lastReceived" as const, title: "Sidst modtaget", value: formatTime(stats?.lastReceivedAt), small: true },
     ].filter((w) => (widgetState as any)[w.id]);
 
     if (kpiWidgets.length === 0) return null;
@@ -267,34 +297,28 @@ useEffect(() => {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpiWidgets.map((w) => (
-          <KpiCard
-            key={w.id}
-            title={w.title}
-            value={w.value}
-            small={(w as any).small}
-          />
+          <KpiCard key={w.id} title={w.title} value={w.value} small={(w as any).small} />
         ))}
       </div>
     );
   };
 
+  // THIS is now "Klubber" list in the place where "Grupper" was
   const renderGroupFilter = () => {
-    const rows = stats?.byGroup ?? [];
-    if (rows.length === 0) return null;
+    // show card even if empty, so you can see it
+    const total = stats?.lastNDays ?? 0;
 
     return (
       <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow-lg">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-white">Grupper</h2>
-
           <div className="text-xs text-gray-300">
-            Filter:{" "}
-            {activeGroupKey ? (
-              <span className="font-medium text-white">
-                {activeGroupName || activeGroupKey}
-              </span>
+            {clubLoading ? (
+              <span className="text-gray-400">Henter…</span>
+            ) : clubError ? (
+              <span className="text-red-400">{clubError}</span>
             ) : (
-              <span className="text-gray-400">Ingen</span>
+              <span className="text-gray-400">Leads pr. klub</span>
             )}
           </div>
         </div>
@@ -303,45 +327,35 @@ useEffect(() => {
           <table className="w-full text-sm">
             <thead className="bg-gray-950 text-left">
               <tr>
-                <th className="px-4 py-3 font-medium text-gray-200">Gruppe</th>
-                <th className="px-4 py-3 font-medium text-gray-200">Leads</th>
+                <th className="px-4 py-3 font-medium text-gray-200">Klub</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-200">Leads</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-t border-gray-800">
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setActiveGroupKey("")}
-                    className={
-                      !activeGroupKey
-                        ? "text-white font-semibold"
-                        : "text-gray-300 hover:text-white"
-                    }
-                  >
-                    Alle kampagner
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-gray-100">{stats?.lastNDays ?? 0}</td>
+                <td className="px-4 py-3 text-gray-100">Alle klubber</td>
+                <td className="px-4 py-3 text-right font-semibold text-gray-100">{total}</td>
               </tr>
 
-              {rows.map((g) => (
-                <tr key={g.groupKey} className="border-t border-gray-800">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setActiveGroupKey(g.groupKey)}
-                      className={
-                        activeGroupKey === g.groupKey
-                          ? "text-white font-semibold"
-                          : "text-gray-300 hover:text-white"
-                      }
-                    >
-                      {g.displayName}
-                    </button>
-                    <div className="text-xs text-gray-500">{g.groupKey}</div>
+              {(clubRows ?? []).length === 0 ? (
+                <tr className="border-t border-gray-800">
+                  <td className="px-4 py-3 text-gray-300" colSpan={2}>
+                    Ingen klub-data endnu (mangler club_id/klubnavn på leads).
                   </td>
-                  <td className="px-4 py-3 text-gray-100">{g.count}</td>
                 </tr>
-              ))}
+              ) : (
+                clubRows.map((r) => (
+                  <tr
+                    key={`${r.clubId ?? "no-id"}-${r.clubName ?? "no-name"}`}
+                    className="border-t border-gray-800"
+                  >
+                    <td className="px-4 py-3 text-gray-100">
+                      {(r.clubName && r.clubName.trim()) || "Ukendt klub"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-100">{r.leads}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -353,7 +367,6 @@ useEffect(() => {
     if (!widgetState.group_barchart) return null;
 
     const rows = stats?.byGroup ?? [];
-    // Hvis du allerede har valgt en gruppe som filter, giver grafen typisk mindre mening
     if (activeGroupKey) return null;
     if (rows.length === 0) return null;
 
@@ -390,9 +403,7 @@ useEffect(() => {
           </ResponsiveContainer>
         </div>
 
-        <div className="mt-3 text-xs text-gray-400">
-          Viser top 12 grupper (sorteret som API’et returnerer).
-        </div>
+        <div className="mt-3 text-xs text-gray-400">Viser top 12 grupper.</div>
       </section>
     );
   };
@@ -418,13 +429,7 @@ useEffect(() => {
                 labelStyle={{ color: "#fff" }}
                 itemStyle={{ color: "#fff" }}
               />
-              <Line
-                type="monotone"
-                dataKey="count"
-                stroke="#ffffff"
-                strokeWidth={3}
-                dot={{ r: 3 }}
-              />
+              <Line type="monotone" dataKey="count" stroke="#ffffff" strokeWidth={3} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -491,7 +496,6 @@ useEffect(() => {
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      {/* ✅ Primær linje: Klubnavn hvis vi har det */}
                       <div className="truncate text-sm font-medium text-white">
                         {primary === "unknown" ? (
                           <span className="font-bold text-red-400">unknown</span>
@@ -511,7 +515,6 @@ useEffect(() => {
                         </span>
                       </div>
 
-                      {/* ✅ Sekundær linje: campaignKey hvis clubName er sat */}
                       <div className="mt-1 truncate text-xs text-gray-300">
                         {e.clubName ? (
                           <>
@@ -583,95 +586,97 @@ useEffect(() => {
         </div>
 
         <div className="flex items-center gap-2">
-  {/* Campaign filter */}
-  <select
-    value={activeCampaignKey}
-    onChange={(e) => setActiveCampaignKey(e.target.value)}
-    className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-black"
-  >
-    <option value="">Alle campaigns</option>
-    {(stats?.byCampaign ?? []).map((c) => (
-      <option key={c.campaignKey} value={c.campaignKey}>
-        {c.campaignKey}
-      </option>
-    ))}
-  </select>
-  <div className="flex items-center overflow-hidden rounded-xl border border-gray-800">
-  <button
-    type="button"
-    onClick={() => setActiveSource("")}
-    className={
-      "px-3 py-2 text-sm font-medium " +
-      (activeSource === ""
-        ? "bg-white text-black"
-        : "bg-gray-950 text-white hover:bg-black")
-    }
-  >
-    All
-  </button>
+          {/* Campaign filter */}
+          <select
+            value={activeCampaignKey}
+            onChange={(e) => setActiveCampaignKey(e.target.value)}
+            className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm font-medium text-white hover:bg-black"
+          >
+            <option value="">Alle campaigns</option>
+            {(stats?.byCampaign ?? []).map((c) => (
+              <option key={c.campaignKey} value={c.campaignKey}>
+                {c.campaignKey}
+              </option>
+            ))}
+          </select>
 
-  <button
-    type="button"
-    onClick={() => setActiveSource("meta")}
-    className={
-      "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
-      (activeSource === "meta"
-        ? "bg-white text-black"
-        : "bg-gray-950 text-white hover:bg-black")
-    }
-  >
-    Meta
-  </button>
+          <div className="flex items-center overflow-hidden rounded-xl border border-gray-800">
+            <button
+              type="button"
+              onClick={() => setActiveSource("")}
+              className={
+                "px-3 py-2 text-sm font-medium " +
+                (activeSource === ""
+                  ? "bg-white text-black"
+                  : "bg-gray-950 text-white hover:bg-black")
+              }
+            >
+              All
+            </button>
 
-  <button
-    type="button"
-    onClick={() => setActiveSource("drupal")}
-    className={
-      "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
-      (activeSource === "drupal"
-        ? "bg-white text-black"
-        : "bg-gray-950 text-white hover:bg-black")
-    }
-  >
-    Drupal
-  </button>
-</div>
+            <button
+              type="button"
+              onClick={() => setActiveSource("meta")}
+              className={
+                "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
+                (activeSource === "meta"
+                  ? "bg-white text-black"
+                  : "bg-gray-950 text-white hover:bg-black")
+              }
+            >
+              Meta
+            </button>
 
-  {activeGroupKey ? (
-    <button
-      onClick={() => setActiveGroupKey("")}
-      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-    >
-      Clear group filter
-    </button>
-  ) : null}
+            <button
+              type="button"
+              onClick={() => setActiveSource("drupal")}
+              className={
+                "px-3 py-2 text-sm font-medium border-l border-gray-800 " +
+                (activeSource === "drupal"
+                  ? "bg-white text-black"
+                  : "bg-gray-950 text-white hover:bg-black")
+              }
+            >
+              Drupal
+            </button>
+          </div>
 
-  <button
-    onClick={() => setGroupsOpen(true)}
-    className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-  >
-    Grupper
-  </button>
+          {activeGroupKey ? (
+            <button
+              onClick={() => setActiveGroupKey("")}
+              className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+            >
+              Clear group filter
+            </button>
+          ) : null}
 
-  <button
-    onClick={() => setCustomizeOpen(true)}
-    className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-  >
-    Customize metrics
-  </button>
+          <button
+            onClick={() => setGroupsOpen(true)}
+            className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+          >
+            Grupper
+          </button>
 
-  <button
-    onClick={() =>
-      refreshAll(tenant, activeGroupKey).catch((e: any) =>
-        setError(e?.message ?? "Refresh fejlede")
-      )
-    }
-    className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
-  >
-    Refresh
-  </button>
-</div>
- </div>
+          <button
+            onClick={() => setCustomizeOpen(true)}
+            className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+          >
+            Customize metrics
+          </button>
+
+          <button
+            onClick={() =>
+              refreshAll(tenant, activeGroupKey).catch((e: any) =>
+                setError(e?.message ?? "Refresh fejlede")
+              )
+            }
+            className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
       {renderKpis()}
       {renderGroupFilter()}
 

@@ -4,9 +4,9 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 
 function parseDaysParam(daysStr: string | null) {
-  const n = Number(daysStr ?? "7");
-  if (!Number.isFinite(n) || n <= 0) return 7;
-  return Math.min(Math.max(Math.floor(n), 1), 365);
+  const days = Number(daysStr ?? "7");
+  if (!Number.isFinite(days) || days <= 0) return 7;
+  return Math.min(Math.max(days, 1), 365);
 }
 
 export async function GET(req: Request) {
@@ -22,19 +22,20 @@ export async function GET(req: Request) {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    // 1) count pr clubId
     const counts = await prisma.leadEvent.groupBy({
-      by: ["clubId"],
-      where: {
-        tenantKey: tenant,
-        receivedAt: { gte: since },
-        clubId: { not: null },
-      },
-      _count: { clubId: true }, // Prisma v6 safe
-    });
+  by: ["clubId"],
+  where: {
+    tenantKey: tenant,
+    receivedAt: { gte: since },
+    clubId: { not: null },
+  },
+  _count: { clubId: true }, // <-- brug count på clubId i stedet for _all
+});
 
-    // 2) get latest clubName per clubId
-    const latestNames = await prisma.leadEvent.findMany({
+// Sortér i JS (desc)
+counts.sort((a, b) => (b._count.clubId ?? 0) - (a._count.clubId ?? 0));
+
+    const names = await prisma.leadEvent.findMany({
       where: {
         tenantKey: tenant,
         receivedAt: { gte: since },
@@ -46,20 +47,17 @@ export async function GET(req: Request) {
     });
 
     const nameById = new Map<string, string>();
-    for (const r of latestNames) {
-      if (r.clubId) nameById.set(r.clubId, r.clubName ?? r.clubId);
+    for (const row of names) {
+      if (row.clubId) nameById.set(row.clubId, row.clubName ?? row.clubId);
     }
 
-    // 3) map + sort
-    const rows = counts
-      .map((c) => ({
-        clubId: c.clubId as string,
-        clubName: nameById.get(c.clubId as string) ?? (c.clubId as string),
-        leads: c._count.clubId ?? 0,
-      }))
-      .sort((a, b) => b.leads - a.leads);
+    const rows = counts.map((c) => ({
+      clubId: c.clubId as string,
+      clubName: nameById.get(c.clubId as string) ?? (c.clubId as string),
+      leads: c._count.clubId,
+    }));
 
-    return NextResponse.json({ ok: true, days, rows });
+    return NextResponse.json({ ok: true, rows, days });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "Unknown error" },
