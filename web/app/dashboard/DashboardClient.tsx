@@ -323,46 +323,51 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-gray-800">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-950 text-left">
-              <tr>
-                <th className="px-4 py-3 font-medium text-gray-200">Klub</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-200">Leads</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-gray-800">
-                <td className="px-4 py-3 text-gray-100">Alle klubber</td>
-                <td className="px-4 py-3 text-right font-semibold text-gray-100">{total}</td>
-              </tr>
+      <div className="overflow-hidden rounded-xl border border-gray-800">
+  <div className="max-h-24 overflow-y-auto">
+    <table className="w-full text-sm">
+      <thead className="sticky top-0 z-10 bg-gray-950 text-left">
+        <tr>
+          <th className="px-4 py-3 font-medium text-gray-200">Klub</th>
+          <th className="px-4 py-3 text-right font-medium text-gray-200">Leads</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr className="border-t border-gray-800">
+          <td className="px-4 py-3 text-gray-100">Alle klubber</td>
+          <td className="px-4 py-3 text-right font-semibold text-gray-100">
+            {total}
+          </td>
+        </tr>
 
-              {(clubRows ?? []).length === 0 ? (
-                <tr className="border-t border-gray-800">
-                  <td className="px-4 py-3 text-gray-300" colSpan={2}>
-                    Ingen klub-data endnu (mangler club_id/klubnavn på leads).
-                  </td>
-                </tr>
-              ) : (
-                clubRows.map((r) => (
-                  <tr
-                    key={`${r.clubId ?? "no-id"}-${r.clubName ?? "no-name"}`}
-                    className="border-t border-gray-800"
-                  >
-                    <td className="px-4 py-3 text-gray-100">
-                      {(r.clubName && r.clubName.trim()) || "Ukendt klub"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-100">{r.leads}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    );
-  };
-
+        {(clubRows ?? []).length === 0 ? (
+          <tr className="border-t border-gray-800">
+            <td className="px-4 py-3 text-gray-300" colSpan={2}>
+              Ingen klub-data endnu (mangler club_id/klubnavn på leads).
+            </td>
+          </tr>
+        ) : (
+          clubRows.map((r) => (
+            <tr
+              key={`${r.clubId ?? "no-id"}-${r.clubName ?? "no-name"}`}
+              className="border-t border-gray-800"
+            >
+              <td className="px-4 py-3 text-gray-100">
+                {(r.clubName && r.clubName.trim()) || "Ukendt klub"}
+              </td>
+              <td className="px-4 py-3 text-right font-semibold text-gray-100">
+                {r.leads}
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+);
+};
   const renderGroupBarChart = () => {
     if (!widgetState.group_barchart) return null;
 

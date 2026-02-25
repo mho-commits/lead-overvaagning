@@ -63,7 +63,10 @@ export default function GroupsPanel({
       .map(([k]) => k);
   }
 
-  const selectedCount = useMemo(() => selectedKeysFromState(selected).length, [selected]);
+  const selectedCount = useMemo(
+    () => selectedKeysFromState(selected).length,
+    [selected]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -72,6 +75,9 @@ export default function GroupsPanel({
     setError(null);
     setSaving(false);
     setSearch("");
+    setGroupKey("");
+    setDisplayName("");
+    setSelected({});
     setClubDays(7);
     setClubRows([]);
     setClubLoading(false);
@@ -90,14 +96,22 @@ export default function GroupsPanel({
       setClubError(null);
       try {
         const qs = new URLSearchParams({ tenant, days: String(clubDays) });
-        const res = await fetch(`/api/grouped/clubs?${qs.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/grouped/clubs?${qs.toString()}`, {
+          cache: "no-store",
+        });
         const json = await res.json().catch(() => null);
 
-        if (!res.ok || !json?.ok) throw new Error(json?.error || `Fetch fejlede (${res.status})`);
+        if (!res.ok || !json?.ok)
+          throw new Error(json?.error || `Fetch fejlede (${res.status})`);
+
         if (!cancelled) {
-  const rows: ClubRow[] = (json.rows ?? []).slice().sort((a: ClubRow, b: ClubRow) => (b.leads ?? 0) - (a.leads ?? 0));
-  setClubRows(rows);
-}
+          const rows: ClubRow[] = (json.rows ?? [])
+            .slice()
+            .sort(
+              (a: ClubRow, b: ClubRow) => (b.leads ?? 0) - (a.leads ?? 0)
+            );
+          setClubRows(rows);
+        }
       } catch (e: any) {
         if (!cancelled) setClubError(e?.message ?? "Ukendt fejl");
       } finally {
@@ -164,11 +178,17 @@ export default function GroupsPanel({
       const res = await fetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantKey: tenant, groupKey: gk, displayName: dn, campaignKeys: keys }),
+        body: JSON.stringify({
+          tenantKey: tenant,
+          groupKey: gk,
+          displayName: dn,
+          campaignKeys: keys,
+        }),
       });
 
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) throw new Error(json?.error || `Save fejlede (${res.status})`);
+      if (!res.ok || !json?.ok)
+        throw new Error(json?.error || `Save fejlede (${res.status})`);
 
       await onSaved();
       setMode("list");
@@ -226,8 +246,12 @@ export default function GroupsPanel({
           <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-white">Samlet leads pr. klub</div>
-                <div className="text-xs text-gray-400">Henter fra /api/grouped/clubs</div>
+                <div className="text-sm font-medium text-white">
+                  Samlet leads pr. klub
+                </div>
+                <div className="text-xs text-gray-400">
+                  Henter fra /api/grouped/clubs
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -255,47 +279,60 @@ export default function GroupsPanel({
               <div className="text-sm text-gray-300">Ingen data.</div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-gray-800">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-900 text-left">
-                    <tr>
-                      <th className="px-4 py-3 font-medium text-gray-200">Klub</th>
-                      <th className="px-4 py-3 font-medium text-gray-200">Club ID</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-200">Leads</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clubRows.map((r) => (
-                      <tr key={`${r.clubId ?? "no-id"}-${r.clubName ?? "no-name"}`} className="border-t border-gray-800">
-                        <td className="px-4 py-3 text-gray-100">{r.clubName || "Ukendt klub"}</td>
-<td className="px-4 py-3 text-gray-300">{r.clubId || "—"}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-100">
-                          {r.leads}
-                        </td>
+                {/* Scroll her: færre rækker ad gangen */}
+<div className="h-24 overflow-y-scroll border border-red-500">
+                    <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 bg-gray-900 text-left">
+                      <tr>
+                        <th className="px-4 py-3 font-medium text-gray-200">
+                          Klub
+                        </th>
+                        <th className="px-4 py-3 font-medium text-gray-200">
+                          Club ID
+                        </th>
+                        <th className="px-4 py-3 text-right font-medium text-gray-200">
+                          Leads
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {clubRows.map((r) => (
+                        <tr
+                          key={`${r.clubId ?? "no-id"}-${
+                            r.clubName ?? "no-name"
+                          }`}
+                          className="border-t border-gray-800"
+                        >
+                          <td className="px-4 py-3 text-gray-100">
+                            {r.clubName || "Ukendt klub"}
+                          </td>
+                          <td className="px-4 py-3 text-gray-300">
+                            {r.clubId || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-100">
+                            {r.leads}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
-
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={onClose}
-                className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
-              >
-                Luk
-              </button>
-            </div>
           </div>
-        ) : null}
-
-        {/* Groups tab (existing) */}
-        {tab === "groups" ? (
-          <>
+        ) : (
+          // Groups tab
+          <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
             {mode === "list" ? (
               <>
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="text-sm text-gray-300">Saml flere kampagner i én gruppe.</div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-white">Grupper</div>
+                    <div className="text-xs text-gray-400">
+                      Antal: {groups.length}
+                    </div>
+                  </div>
+
                   <button
                     onClick={startCreate}
                     className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-black hover:bg-gray-200"
@@ -305,70 +342,96 @@ export default function GroupsPanel({
                 </div>
 
                 {groups.length === 0 ? (
-                  <div className="rounded-xl border border-gray-800 bg-gray-950 p-4 text-sm text-gray-300">
-                    Ingen grupper endnu.
-                  </div>
+                  <div className="text-sm text-gray-300">Ingen grupper endnu.</div>
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-gray-800">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-950 text-left">
-                        <tr>
-                          <th className="px-4 py-3 font-medium text-gray-200">Navn</th>
-                          <th className="px-4 py-3 font-medium text-gray-200">Group key</th>
-                          <th className="px-4 py-3 font-medium text-gray-200">Kampagner</th>
-                          <th className="px-4 py-3 font-medium text-gray-200"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {groups.map((g) => (
-                          <tr key={g.groupKey} className="border-t border-gray-800">
-                            <td className="px-4 py-3 text-gray-100">{g.displayName}</td>
-                            <td className="px-4 py-3 text-gray-300">{g.groupKey}</td>
-                            <td className="px-4 py-3 text-gray-300">{g.campaignKeys?.length ?? 0}</td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => startEdit(g)}
-                                className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-medium text-white hover:bg-black"
-                              >
-                                Redigér
-                              </button>
-                            </td>
+                    <div className="max-h-72 overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 z-10 bg-gray-900 text-left">
+                          <tr className="text-gray-200">
+                            <th className="px-4 py-3 font-medium">Navn</th>
+                            <th className="px-4 py-3 font-medium">Group key</th>
+                            <th className="px-4 py-3 font-medium">Kampagner</th>
+                            <th className="px-4 py-3 text-right font-medium">
+                              Handling
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {groups.map((g) => (
+                            <tr
+                              key={g.groupKey}
+                              className="border-t border-gray-800"
+                            >
+                              <td className="px-4 py-3 text-gray-100">
+                                {g.displayName}
+                              </td>
+                              <td className="px-4 py-3 text-gray-300">
+                                {g.groupKey}
+                              </td>
+                              <td className="px-4 py-3 text-gray-300">
+                                {g.campaignKeys?.length ?? 0}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <button
+                                  onClick={() => startEdit(g)}
+                                  className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-medium text-white hover:bg-black"
+                                >
+                                  Redigér
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
+
+                <div className="mt-5 flex justify-end">
+                  <button
+                    onClick={onClose}
+                    className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-2 text-sm font-medium text-white hover:bg-black"
+                  >
+                    Luk
+                  </button>
+                </div>
               </>
             ) : (
               <>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="text-xs font-medium text-gray-300">Group key</label>
+                    <label className="mb-1 block text-xs text-gray-400">
+                      Group key
+                    </label>
                     <input
                       value={groupKey}
                       onChange={(e) => setGroupKey(e.target.value)}
-                      placeholder="drupal-32"
-                      className="mt-2 w-full rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                      placeholder="fx drupal-32"
+                      className="w-full rounded-xl border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white placeholder:text-gray-500"
                     />
-                    <p className="mt-2 text-xs text-gray-500">Brug et stabilt key uden mellemrum.</p>
                   </div>
 
                   <div>
-                    <label className="text-xs font-medium text-gray-300">Display name</label>
+                    <label className="mb-1 block text-xs text-gray-400">
+                      Display name
+                    </label>
                     <input
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Drupal kampagner (32)"
-                      className="mt-2 w-full rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                      placeholder="fx Drupal kampagner (32)"
+                      className="w-full rounded-xl border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-white placeholder:text-gray-500"
                     />
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-xl border border-gray-800 bg-gray-950 p-4">
+                <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm font-medium text-white">
-                      Vælg campaigns <span className="text-gray-400">({selectedCount} valgt)</span>
+                      Vælg campaigns{" "}
+                      <span className="text-gray-400">
+                        ({selectedCount} valgt)
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -396,13 +459,20 @@ export default function GroupsPanel({
 
                   <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-gray-800">
                     {filteredCampaignKeys.length === 0 ? (
-                      <div className="p-4 text-sm text-gray-300">Ingen match.</div>
+                      <div className="p-4 text-sm text-gray-300">
+                        Ingen match.
+                      </div>
                     ) : (
                       <ul className="divide-y divide-gray-800">
                         {filteredCampaignKeys.map((k) => (
-                          <li key={k} className="flex items-center justify-between px-4 py-3">
+                          <li
+                            key={k}
+                            className="flex items-center justify-between px-4 py-3"
+                          >
                             <div className="min-w-0">
-                              <div className="truncate text-sm text-gray-100">{k}</div>
+                              <div className="truncate text-sm text-gray-100">
+                                {k}
+                              </div>
                             </div>
                             <input
                               type="checkbox"
@@ -450,8 +520,8 @@ export default function GroupsPanel({
                 </div>
               </>
             )}
-          </>
-        ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
