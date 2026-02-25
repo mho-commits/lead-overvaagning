@@ -324,7 +324,7 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
         </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-800">
-  <div className="max-h-24 overflow-y-auto">
+  <div className="max-h-80 overflow-y-auto">
     <table className="w-full text-sm">
       <thead className="sticky top-0 z-10 bg-gray-950 text-left">
         <tr>
