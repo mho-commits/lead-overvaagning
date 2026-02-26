@@ -8,82 +8,91 @@ datasource db {
 }
 
 model LeadEvent {
-  id               String   @id @default(uuid())
-  tenantKey        String
-  source           String
-  receivedAt       DateTime @default(now())
-  occurredAt       DateTime?
+  id             String    @id @default(uuid())
+  tenantKey      String
+  source         String
+  receivedAt     DateTime  @default(now())
+  occurredAt     DateTime?
+  campaignKey    String
+  campaignName   String?
+  formId         String?
+  externalLeadId String?
+  email          String?
+  phone          String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmContent     String?
+  utmTerm        String?
+  rawPayload     Json
+  clubId         String?
+  clubName       String?
 
-  campaignKey      String
-  campaignName     String?
-clubId   String?
-clubName String?
-
-  formId           String?
-  externalLeadId   String?
-
-  email            String?
-  phone            String?
-
-  utmSource        String?
-  utmMedium        String?
-  utmCampaign      String?
-  utmContent       String?
-  utmTerm          String?
-
-  rawPayload       Json
-
+  @@unique([source, externalLeadId])
   @@index([tenantKey, receivedAt])
   @@index([tenantKey, campaignKey, receivedAt])
+}
+
+model Lead {
+  id             String   @id @default(uuid())
+  tenantKey      String
+  clubId         String?
+  source         String
+  externalLeadId String
+  name           String?
+  email          String?
+  phone          String?
+  age            Int?
+  consent        Boolean?
+  status         String   @default("new")
+  createdAt      DateTime @default(now())
+
   @@unique([source, externalLeadId])
 }
-model Tenant {
-  tenantKey   String   @id
-  name        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
-  mappings    Mapping[]
+model Tenant {
+  tenantKey String    @id
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  mappings  Mapping[]
 }
 
 model Mapping {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   tenantKey      String
-  source         String   // "drupal" | "meta"
+  source         String
   formId         String
   campaignKey    String
   forceTenantKey String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantKey], references: [tenantKey], onDelete: Cascade)
+  tenant         Tenant   @relation(fields: [tenantKey], references: [tenantKey], onDelete: Cascade)
 
   @@unique([tenantKey, source, formId])
   @@index([source, formId])
 }
 
 model CampaignGroup {
-  id          String   @id @default(cuid())
+  id          String              @id @default(cuid())
   tenantKey   String
   groupKey    String
   displayName String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  items CampaignGroupItem[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  items       CampaignGroupItem[]
 
   @@unique([tenantKey, groupKey])
   @@index([tenantKey])
 }
 
 model CampaignGroupItem {
-  id              String        @id @default(cuid())
-  tenantKey        String
-  groupId          String
-  campaignKey      String
-  createdAt        DateTime     @default(now())
-
-  group CampaignGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  id          String        @id @default(cuid())
+  tenantKey   String
+  groupId     String
+  campaignKey String
+  createdAt   DateTime      @default(now())
+  group       CampaignGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@unique([tenantKey, groupId, campaignKey])
   @@index([tenantKey])
