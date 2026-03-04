@@ -95,7 +95,7 @@ export default function GroupsPanel({
       setClubLoading(true);
       setClubError(null);
       try {
-        const qs = new URLSearchParams({ tenant, days: String(clubDays) });
+       const qs = new URLSearchParams({ tenant });
         const res = await fetch(`/api/grouped/clubs?${qs.toString()}`, {
           cache: "no-store",
         });
