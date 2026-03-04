@@ -26,7 +26,6 @@ export async function GET(req: Request) {
   by: ["clubId"],
   where: {
     tenantKey: tenant,
-    receivedAt: { gte: since },
     clubId: { not: null },
   },
   _count: { clubId: true }, // <-- brug count på clubId i stedet for _all
@@ -38,7 +37,6 @@ counts.sort((a, b) => (b._count.clubId ?? 0) - (a._count.clubId ?? 0));
     const names = await prisma.leadEvent.findMany({
       where: {
         tenantKey: tenant,
-        receivedAt: { gte: since },
         clubId: { not: null },
       },
       distinct: ["clubId"],
