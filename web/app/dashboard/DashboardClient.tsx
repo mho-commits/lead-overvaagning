@@ -145,7 +145,7 @@ export default function DashboardClient({ tenant }: { tenant: string }) {
   }
 
   async function fetchClubs(t: string) {
-    const q = `/api/grouped/clubs?tenant=${encodeURIComponent(t)}&days=${days}`;
+   const q = `/api/grouped/clubs?tenant=${encodeURIComponent(t)}`;
     const res = await fetch(q, { cache: "no-store" });
     if (!res.ok) throw new Error(`clubs ${res.status}`);
     return (await res.json()) as { ok: boolean; rows: ClubRow[]; error?: string };
